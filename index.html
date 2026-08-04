@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多功能團體/家庭共同分帳系統</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        @media print {
+            body { background-color: #fff; color: #000; }
+            .no-print { display: none !important; }
+            .print-full { width: 100% !important; max-width: 100% !important; padding: 0 !important; }
+            .shadow-sm, .rounded-2xl { shadow: none !important; border: none !important; }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 font-sans text-slate-800 min-h-screen">
+
+    <div id="app" class="max-w-7xl mx-auto p-4 md:p-8 print-full">
+        
+        <header class="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-200 pb-5">
+            <div>
+                <h1 class="text-3xl font-bold text-slate-900 flex items-center gap-2">
+                    <i class="fa-solid fa-calculator-combined text-indigo-600"></i> 團體共同分帳系統
+                </h1>
+                <p class="text-slate-500 mt-1">選定本次出遊團體後，即可針對內部成員進行個別分攤與最佳化拆帳</p>
+            </div>
+            
+            <div class="bg-indigo-50 p-3 rounded-xl border border-indigo-100 flex items-center gap-3 no-print">
+                <label class="text-sm font-bold text-indigo-900 whitespace-nowrap"><i class="fa-solid fa-campground mr-1"></i>選取本次出遊團體：</label>
+                <select v-model="currentGroup" @change="handleGroupChange" class="px-4 py-2 border border-indigo-200 rounded-lg text-sm font-bold bg-white text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+                    <option v-for="(members, groupName) in builtInGroups" :key="groupName" :value="groupName">
+                        {{ groupName }} ({{ members.length }}人)
+                    </option>
+                </select>
+            </div>
+        </header>
+
+        <div class="hidden print:block mb-4 text-xl font-bold text-slate-800">
+            本次結算團體：【{{ currentGroup }}】
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <div class="lg:col-span-1 space-y-6 no-print">
+                
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center gap-2 text-slate-900">
+                        <i class="fa-solid fa-receipt text-indigo-500"></i> 新增【{{ currentGroup }}】花費
+                    </h2>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-500 mb-1">消費項目名稱</label>
+                            <input v-model="expense.title" type="text" placeholder="例如：民宿包棟、晚餐、門票" class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-500 mb-1">誰付的錢？(付款人)</label>
+                                <select v-model="expense.payer" class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white">
+                                    <option v-for="m in currentMembers" :key="m" :value="m">{{ m }}</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-500 mb-1">總金額 (元)</label>
+                                <input v-model.number="expense.amount" type="number" min="0" placeholder="0" class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between items-center mb-1">
+                                <label class="block text-xs font-medium text-slate-500">誰要分攤？（預設全選，可手動勾選）</label>
+                                <button @click="selectAllMembers" class="text-xs text-indigo-600 hover:underline">全選</button>
+                            </div>
+                            <div class="border border-slate-200 rounded-lg p-3 max-h-52 overflow-y-auto space-y-2 bg-slate-50/50">
+                                <label v-for="m in currentMembers" :key="m" class="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-100 p-1 rounded transition">
+                                    <input type="checkbox" :value="m" v-model="expense.participants" class="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4">
+                                    <span class="text-slate-700 font-medium">{{ m }}</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <button @click="addExpense" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-lg font-medium transition text-sm shadow-sm">
+                            <i class="fa-solid fa-plus mr-1"></i> 新增此筆花費
+                        </button>
+                    </div>
+                </div>
+
+                <button @click="loadDemoData" class="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 py-2 rounded-lg font-medium transition text-xs flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-flask"></i> 載入一組【{{ currentGroup }}】測試花費 (Demo)
+                </button>
+
+            </div>
+
+            <div class="lg:col-span-2 space-y-6">
+                
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-lg font-semibold flex items-center gap-2">
+                            <i class="fa-solid fa-list-ul text-indigo-500"></i> 3. 花費明細表
+                        </h2>
+                        <div class="flex gap-3 no-print">
+                            <button v-if="expenses.length > 0" @click="exportToCSV" class="text-xs text-emerald-600 hover:underline font-medium"><i class="fa-solid fa-file-csv mr-1"></i>儲存報表 (CSV)</button>
+                            <button v-if="expenses.length > 0" @click="printReport" class="text-xs text-indigo-600 hover:underline font-medium"><i class="fa-solid fa-print mr-1"></i>列印 / 存成 PDF</button>
+                            <button v-if="expenses.length > 0" @click="clearAll" class="text-xs text-red-500 hover:underline"><i class="fa-solid fa-trash-can mr-1"></i>全部清空</button>
+                        </div>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm min-w-[600px]">
+                            <thead>
+                                <tr class="bg-slate-50 text-slate-500 border-b border-slate-100">
+                                    <th class="p-3">項目</th>
+                                    <th class="p-3">付款方</th>
+                                    <th class="p-3 text-right">總金額</th>
+                                    <th v-for="m in currentMembers" :key="m" class="p-3 text-right text-indigo-600 bg-indigo-50/30 font-semibold min-w-[75px]">
+                                        {{ m }}
+                                    </th>
+                                    <th class="p-3 text-center no-print">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="(item, idx) in expenses" :key="idx" class="border-b border-slate-100 hover:bg-slate-50/50 transition">
+                                    <td class="p-3 font-medium text-slate-900">{{ item.title }}</td>
+                                    <td class="p-3">
+                                        <span class="bg-amber-50 text-amber-700 px-2 py-0.5 rounded text-xs font-semibold">
+                                            {{ item.payer }}
+                                        </span>
+                                    </td>
+                                    <td class="p-3 text-right font-semibold text-slate-700">${{ item.amount.toLocaleString() }}</td>
+                                    
+                                    <td v-for="m in currentMembers" :key="m" class="p-3 text-right">
+                                        <span v-if="item.participants.includes(m)" class="font-medium text-slate-800">
+                                            ${{ Math.round(item.amount / item.participants.length).toLocaleString() }}
+                                        </span>
+                                        <span v-else class="text-slate-300 font-normal">0</span>
+                                    </td>
+
+                                    <td class="p-3 text-center no-print">
+                                        <button @click="deleteExpense(idx)" class="text-slate-400 hover:text-red-500 transition"><i class="fa-solid fa-xmark"></i></button>
+                                    </td>
+                                </tr>
+                                <tr v-if="expenses.length === 0">
+                                    <td :colspan="4 + currentMembers.length" class="p-8 text-center text-slate-400 italic">目前【{{ currentGroup }}】沒有任何消費紀錄</td>
+                                </tr >
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-hand-holding-dollar text-emerald-500"></i> 4. 最終結算報告 (【{{ currentGroup }}】成員互轉指南)
+                    </h2>
+
+                    <div v-if="expenses.length > 0">
+                        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mb-6">
+                            <div v-for="m in currentMembers" :key="m" class="bg-slate-50 p-3 rounded-xl border border-slate-100 flex flex-col justify-between">
+                                <div>
+                                    <p class="font-bold text-slate-800 text-sm mb-1">{{ m }}</p>
+                                    <div class="text-[11px] text-slate-500 space-y-0.5">
+                                        <p>代墊: <span class="text-emerald-600 font-medium">${{ summary[m] ? summary[m].paid.toLocaleString() : 0 }}</span></p>
+                                        <p>應付: <span class="text-red-500 font-medium">${{ summary[m] ? Math.round(summary[m].shouldPay).toLocaleString() : 0 }}</span></p>
+                                    </div>
+                                </div>
+                                <div class="mt-2 pt-1.5 border-t border-slate-200/60 text-xs font-extrabold">
+                                    <span v-if="summary[m] && summary[m].net >= 0" class="text-emerald-600">拿回: ${{ Math.round(summary[m].net).toLocaleString() }}</span>
+                                    <span v-else-if="summary[m]" class="text-red-500">補繳: ${{ Math.round(Math.abs(summary[m].net)).toLocaleString() }}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-indigo-50/50 p-5 rounded-xl border border-indigo-100">
+                            <h3 class="text-sm font-semibold text-indigo-900 mb-3 flex items-center gap-1.5">
+                                <i class="fa-solid fa-money-bill-transfer"></i> 轉帳指引（最少轉帳次數）：
+                            </h3>
+                            <ul v-if="settlements.length > 0" class="space-y-3">
+                                <li v-for="(s, idx) in settlements" :key="idx" class="bg-white px-4 py-3 rounded-lg shadow-sm border border-slate-100 flex items-center justify-between text-sm">
+                                    <div class="flex items-center gap-3">
+                                        <span class="font-bold text-red-600 bg-red-50 px-2 py-1 rounded">{{ s.from }}</span>
+                                        <span class="text-slate-400"><i class="fa-solid fa-arrow-right-long"></i></span>
+                                        <span class="text-slate-500">應轉帳給</span>
+                                        <span class="font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded">{{ s.to }}</span>
+                                    </div>
+                                    <div class="text-base font-extrabold text-slate-800">
+                                        ${{ s.amount.toLocaleString() }} 元
+                                    </div>
+                                </li>
+                            </ul>
+                            <p v-else class="text-emerald-700 text-sm font-medium flex items-center gap-1">
+                                <i class="fa-solid fa-circle-check"></i> 所有人收支完全平衡，不需進行任何轉帳！
+                            </p>
+                        </div>
+                    </div>
+                    <div v-else class="text-slate-400 text-sm italic text-center py-8">
+                        請先新增花費項目，系統將自動計算轉帳關係
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, computed } = Vue;
+
+        createApp({
+            setup() {
+                // 1. 定義 3 組獨立的出遊團體與各自的內部成員
+                const builtInGroups = {
+                    '大鎮': ['小狗', '土人', '小黑', '跳龜', '阿樂', '癡漢', '土妹'],
+                    '武陵': ['跳龜', '權益', '狐狸', '蘇美'],
+                    '拉賽福': ['跳龜', '怪咖', '瓦仔', '捲毛', '罐頭']
+                };
+
+                // 當前選定的團體，預設選「大鎮」
+                const currentGroup = ref('大鎮');
+
+                // 動態取得當前團體的成員名單
+                const currentMembers = computed(() => {
+                    return builtInGroups[currentGroup.value] || [];
+                });
+                
+                // 本次出遊的花費清單
+                const expenses = ref([]);
+
+                // 表單輸入綁定資料
+                const expense = ref({
+                    title: '',
+                    payer: '小狗', // 預設為大鎮的第一個成員
+                    amount: null,
+                    participants: ['小狗', '土人', '小黑', '跳龜', '阿樂', '癡漢', '土妹'] // 預設全選
+                });
+
+                // 當使用者切換團體時，自動清空舊花費，並重置輸入表單的預設人選
+                const handleGroupChange = () => {
+                    expenses.value = [];
+                    expense.value.title = '';
+                    expense.value.amount = null;
+                    if (currentMembers.value.length > 0) {
+                        expense.value.payer = currentMembers.value[0];
+                        expense.value.participants = [...currentMembers.value];
+                    }
+                };
+
+                const selectAllMembers = () => {
+                    expense.value.participants = [...currentMembers.value];
+                };
+
+                // 新增花費項目
+                const addExpense = () => {
+                    if (!expense.value.title.trim()) return alert('請輸入項目名稱');
+                    if (!expense.value.payer) return alert('請選擇付款人');
+                    if (!expense.value.amount || expense.value.amount <= 0) return alert('請輸入正確的金額');
+                    if (expense.value.participants.length === 0) return alert('請至少選擇一個分攤成員');
+
+                    expenses.value.push({
+                        title: expense.value.title.trim(),
+                        payer: expense.value.payer,
+                        amount: Number(expense.value.amount),
+                        participants: [...expense.value.participants] 
+                    });
+
+                    // 重置輸入欄位
+                    expense.value.title = '';
+                    expense.value.amount = null;
+                };
+
+                // 刪除單筆花費
+                const deleteExpense = (index) => {
+                    expenses.value.splice(index, 1);
+                };
+
+                // 清空全部
+                const clearAll = () => {
+                    if(confirm(`確定要清空目前【${currentGroup.value}】的所有花費紀錄嗎？`)) {
+                        expenses.value = [];
+                    }
+                };
+
+                // 根據當前選擇的團體，載入各自獨立的測試資料
+                const loadDemoData = () => {
+                    if (currentGroup.value === '大鎮') {
+                        expenses.value = [
+                            { title: '大鎮包棟民宿', payer: '小狗', amount: 14000, participants: ['小狗', '土人', '小黑', '跳龜', '阿樂', '癡漢', '土妹'] }, // 全員均分
+                            { title: '第一晚熱炒聚餐', payer: '土人', amount: 4900, participants: ['小狗', '土人', '小黑', '跳龜', '阿樂', '癡漢', '土妹'] }, // 全員均分
+                            { title: '夜遊宵夜(部分人吃)', payer: '小黑', amount: 1200, participants: ['小黑', '跳龜', '阿樂', '癡漢'] }, // 指定特定人
+                            { title: '單獨幫土妹代購點心', payer: '跳龜', amount: 500, participants: ['土妹'] } // 單獨給特定人
+                        ];
+                    } else if (currentGroup.value === '武陵') {
+                        expenses.value = [
+                            { title: '武陵農場門票+露營費', payer: '跳龜', amount: 4000, participants: ['跳龜', '權益', '狐狸', '蘇美'] },
+                            { title: '烤肉食材大禮包', payer: '權益', amount: 3200, participants: ['跳龜', '權益', '狐狸', '蘇美'] },
+                            { title: '狐狸與蘇美私人零食', payer: '狐狸', amount: 600, participants: ['狐狸', '蘇美'] }
+                        ];
+                    } else if (currentGroup.value === '拉賽福') {
+                        expenses.value = [
+                            { title: '拉賽福聚會包廂費', payer: '怪咖', amount: 5000, participants: ['跳龜', '怪咖', '瓦仔', '捲毛', '罐頭'] },
+                            { title: '威士忌兩支', payer: '瓦仔', amount: 3000, participants: ['跳龜', '怪咖', '瓦仔', '捲毛'] } // 罐頭不喝酒不分攤
+                        ];
+                    }
+                };
+
+                // 計算當前團體內每個人的支出摘要
+                const summary = computed(() => {
+                    const res = {};
+                    currentMembers.value.forEach(m => {
+                        res[m] = { paid: 0, shouldPay: 0, net: 0 };
+                    });
+
+                    expenses.value.forEach(e => {
+                        if (res[e.payer]) res[e.payer].paid += e.amount;
+                        
+                        const share = e.amount / e.participants.length;
+                        e.participants.forEach(p => {
+                            if (res[p]) res[p].shouldPay += share;
+                        });
+                    });
+
+                    currentMembers.value.forEach(m => {
+                        if (res[m]) res[m].net = res[m].paid - res[m].shouldPay;
+                    });
+
+                    return res;
+                });
+
+                // 團體內部拆帳優化演算法
+                const settlements = computed(() => {
+                    let debtors = [];
+                    let creditors = [];
+
+                    currentMembers.value.forEach(m => {
+                        if (!summary.value[m]) return;
+                        const net = Math.round(summary.value[m].net); 
+                        if (net < 0) debtors.push({ name: m, amount: Math.abs(net) });
+                        else if (net > 0) creditors.push({ name: m, amount: net });
+                    });
+
+                    const result = [];
+                    let dIdx = 0, cIdx = 0;
+
+                    while (dIdx < debtors.length && cIdx < creditors.length) {
+                        let debtor = debtors[dIdx];
+                        let creditor = creditors[cIdx];
+                        let settleAmount = Math.min(debtor.amount, creditor.amount);
+                        
+                        if (settleAmount > 0) {
+                            result.push({ from: debtor.name, to: creditor.name, amount: settleAmount });
+                        }
+
+                        debtor.amount -= settleAmount;
+                        creditor.amount -= settleAmount;
+
+                        if (debtor.amount === 0) dIdx++;
+                        if (creditor.amount === 0) cIdx++;
+                    }
+                    return result;
+                });
+
+                // 匯出 CSV 報表
+                const exportToCSV = () => {
+                    let csvContent = "\uFEFF"; 
+                    
+                    let headers = ["項目", "付款方", "總金額"];
+                    currentMembers.value.forEach(m => headers.push(m));
+                    csvContent += headers.join(",") + "\n";
+
+                    expenses.value.forEach(item => {
+                        let row = [item.title, item.payer, item.amount];
+                        currentMembers.value.forEach(m => {
+                            if (item.participants.includes(m)) {
+                                row.push(Math.round(item.amount / item.participants.length));
+                            } else {
+                                row.push(0);
+                            }
+                        });
+                        csvContent += row.join(",") + "\n";
+                    });
+
+                    csvContent += `\n\n【${currentGroup.value}】結算摘要\n成員,已代墊總額,應負擔總額,最終收支(正可拿回/負應補繳)\n`;
+                    currentMembers.value.forEach(m => {
+                        let sum = summary.value[m];
+                        csvContent += `${m},${sum.paid},${Math.round(sum.shouldPay)},${Math.round(sum.net)}\n`;
+                    });
+
+                    csvContent += "\n最少轉帳次數指引\n應轉帳成員,,轉帳給,,金額\n";
+                    settlements.value.forEach(s => {
+                        csvContent += `${s.from},->,${s.to},,${s.amount}\n`;
+                    });
+
+                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement("a");
+                    link.setAttribute("href", url);
+                    link.setAttribute("download", `【${currentGroup.value}】出遊拆帳報表_${new Date().toISOString().slice(0,10)}.csv`);
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                };
+
+                const printReport = () => {
+                    window.print();
+                };
+
+                return {
+                    builtInGroups,
+                    currentGroup,
+                    currentMembers,
+                    expense,
+                    expenses,
+                    handleGroupChange,
+                    addExpense,
+                    deleteExpense,
+                    clearAll,
+                    selectAllMembers,
+                    loadDemoData,
+                    summary,
+                    settlements,
+                    exportToCSV,
+                    printReport
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
