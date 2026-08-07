@@ -45,10 +45,33 @@
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
             
             <div class="lg:col-span-1 space-y-6 no-print">
-                
+
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                     <h2 class="text-lg font-semibold mb-4 flex items-center gap-2 text-slate-900">
-                        <i class="fa-solid fa-receipt text-indigo-500"></i> 新增【{{ currentGroup }}】花費
+                        <i class="fa-solid fa-users text-indigo-500"></i> 1. 【{{ currentGroup }}】成員管理
+                    </h2>
+
+                    <div class="flex flex-wrap gap-2 mb-4">
+                        <span v-for="m in currentMembers" :key="m" class="flex items-center gap-1.5 bg-indigo-50 text-indigo-700 text-sm font-medium pl-3 pr-2 py-1.5 rounded-full border border-indigo-100">
+                            {{ m }}
+                            <button @click="deleteMember(m)" title="刪除此成員" class="text-indigo-400 hover:text-red-500 transition">
+                                <i class="fa-solid fa-circle-xmark"></i>
+                            </button>
+                        </span>
+                        <span v-if="currentMembers.length === 0" class="text-slate-400 text-sm italic">目前尚無成員，請於下方新增</span>
+                    </div>
+
+                    <div class="flex gap-2">
+                        <input v-model="newMemberName" @keyup.enter="addMember" type="text" placeholder="輸入新成員姓名" class="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
+                        <button @click="addMember" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition shrink-0">
+                            <i class="fa-solid fa-user-plus mr-1"></i>新增
+                        </button>
+                    </div>
+                </div>
+
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center gap-2 text-slate-900">
+                        <i class="fa-solid fa-receipt text-indigo-500"></i> 2. 新增【{{ currentGroup }}】花費
                     </h2>
                     
                     <div class="space-y-4">
@@ -210,20 +233,23 @@
 
         createApp({
             setup() {
-                // 1. 定義 3 組獨立的出遊團體與各自的內部成員
-                const builtInGroups = {
+                // 1. 定義 3 組獨立的出遊團體與各自的內部成員（用 ref 包裝，讓成員新增/刪除能即時反應在畫面上）
+                const builtInGroups = ref({
                     '大鎮': ['小狗', '土人', '小黑', '跳龜', '阿樂', '癡漢', '土妹'],
                     '武陵': ['跳龜', '權益', '狐狸', '蘇美'],
                     '拉賽福': ['跳龜', '怪咖', '瓦仔', '捲毛', '罐頭']
-                };
+                });
 
                 // 當前選定的團體，預設選「大鎮」
                 const currentGroup = ref('大鎮');
 
                 // 動態取得當前團體的成員名單
                 const currentMembers = computed(() => {
-                    return builtInGroups[currentGroup.value] || [];
+                    return builtInGroups.value[currentGroup.value] || [];
                 });
+
+                // 新增成員用的輸入欄位
+                const newMemberName = ref('');
                 
                 // 本次出遊的花費清單
                 const expenses = ref([]);
@@ -249,6 +275,42 @@
 
                 const selectAllMembers = () => {
                     expense.value.participants = [...currentMembers.value];
+                };
+
+                // 新增成員到目前選定的團體
+                const addMember = () => {
+                    const name = newMemberName.value.trim();
+                    if (!name) return alert('請輸入成員姓名');
+                    if (currentMembers.value.includes(name)) return alert(`「${name}」已經是【${currentGroup.value}】的成員了`);
+
+                    builtInGroups.value[currentGroup.value].push(name);
+
+                    // 新成員預設加入分攤名單，若表單原本沒有付款人則指定為他
+                    expense.value.participants.push(name);
+                    if (!expense.value.payer) expense.value.payer = name;
+
+                    newMemberName.value = '';
+                };
+
+                // 從目前選定的團體中刪除成員，並同步清理表單與既有花費紀錄中的相關資料
+                const deleteMember = (name) => {
+                    if (currentMembers.value.length <= 1) return alert('至少需保留一位成員');
+                    if (!confirm(`確定要將「${name}」從【${currentGroup.value}】移除嗎？\n這會一併把此人從既有花費的分攤名單中移除（金額將由剩餘分攤人重新均分）。`)) return;
+
+                    const idx = builtInGroups.value[currentGroup.value].indexOf(name);
+                    if (idx > -1) builtInGroups.value[currentGroup.value].splice(idx, 1);
+
+                    // 從表單目前勾選的分攤名單移除
+                    expense.value.participants = expense.value.participants.filter(p => p !== name);
+                    // 若他剛好是表單目前選取的付款人，改指定為剩下的第一位成員
+                    if (expense.value.payer === name) {
+                        expense.value.payer = currentMembers.value[0] || '';
+                    }
+
+                    // 從既有花費紀錄的分攤名單中移除該成員（付款方紀錄予以保留，作為歷史紀錄）
+                    expenses.value.forEach(e => {
+                        e.participants = e.participants.filter(p => p !== name);
+                    });
                 };
 
                 // 新增花費項目
@@ -412,6 +474,9 @@
                     currentMembers,
                     expense,
                     expenses,
+                    newMemberName,
+                    addMember,
+                    deleteMember,
                     handleGroupChange,
                     addExpense,
                     deleteExpense,
