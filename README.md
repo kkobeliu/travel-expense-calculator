@@ -1,0 +1,21 @@
+# 出遊團體分帳系統
+
+以 Vue 3 製作的靜態網站，可直接開啟 `index.html`，或部署到 Vercel。載入介面需要網路連線取得 Vue、Tailwind CSS 與圖示。
+
+## 功能
+
+- 新增、刪除出遊團體，各團體分別保存人員及花費，切換不會清空帳目。
+- 新增、刪除人員；已有付款或分攤紀錄的人員，須先刪除相關花費才能移除，避免帳目不平衡。
+- 每次變更自動存入此瀏覽器的 localStorage，也可按「存檔」。
+- 「下載完整備份」匯出全部團體、人員、花費與目前選取的團體；「匯入備份」驗證 JSON 格式後，經確認取代全部資料。
+- 保留 CSV 匯出、列印、PDF 與轉帳建議。
+
+資料不會上傳到 GitHub 或 Vercel，也不會跨瀏覽器／裝置同步。無痕模式、清除網站資料或更換網址可能使本機存檔無法取用，請下載 JSON 備份並在新網址匯入。CSV 與 PDF 僅為報表，不能作為完整還原檔。
+
+## 部署
+
+在 Vercel 匯入 GitHub 的 `kkobeliu/travel-expense-calculator` 儲存庫，選擇 `main` 分支與 Other 框架。專案內的 `vercel.json` 已設定靜態輸出，不需要安裝套件或建置。連接後推送 `main` 即可觸發部署。
+
+## 測試
+
+使用 Node.js 執行 `node tests/state.test.cjs <Vue-global-JavaScript-檔案路徑>`，驗證團體、人員、帳目保護、自動儲存、還原、匯入驗證與儲存失敗處理。Vue 發行檔可使用網頁引用的 Vue 3 global build。

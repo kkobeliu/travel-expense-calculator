@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <style>
+        [v-cloak] { display: none; }
         @media print {
             body { background-color: #fff; color: #000; }
             .no-print { display: none !important; }
@@ -18,7 +19,7 @@
 </head>
 <body class="bg-slate-50 font-sans text-slate-800 min-h-screen">
 
-    <div id="app" class="max-w-7xl mx-auto p-4 md:p-8 print-full">
+    <div id="app" v-cloak class="max-w-7xl mx-auto p-4 md:p-8 print-full">
         
         <header class="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-200 pb-5">
             <div>
@@ -38,6 +39,40 @@
             </div>
         </header>
 
+        <section class="mb-6 bg-white p-5 rounded-2xl border border-slate-200 no-print" aria-label="團體與人員管理">
+            <div class="flex flex-wrap items-center gap-3 mb-3">
+                <button @click="saveData" class="bg-indigo-600 text-white px-4 py-2 rounded-lg">存檔</button>
+                <button @click="exportBackup" class="border border-slate-300 px-4 py-2 rounded-lg">下載完整備份</button>
+                <label class="border border-slate-300 px-4 py-2 rounded-lg cursor-pointer">匯入備份
+                    <input type="file" accept=".json,application/json" @change="importBackup" class="block text-xs mt-1 max-w-60" aria-label="選擇備份檔案">
+                </label>
+                <span role="status" aria-live="polite" class="text-sm" :class="saveError ? 'text-red-600' : 'text-slate-500'">{{ saveStatus }}</span>
+            </div>
+            <p class="text-xs text-slate-500 mb-4">變更會自動儲存在此瀏覽器；不會跨裝置同步。清除瀏覽器資料前，請下載完整備份。</p>
+            <div class="grid md:grid-cols-2 gap-5">
+                <div>
+                    <h2 class="font-semibold mb-2">出遊團體</h2>
+                    <form @submit.prevent="addGroup" class="flex gap-2">
+                        <input v-model="newGroupName" aria-label="新團體名稱" maxlength="80" placeholder="輸入新團體名稱" class="min-w-0 flex-1 border rounded-lg px-3 py-2">
+                        <button class="bg-indigo-50 text-indigo-700 px-3 py-2 rounded-lg">新增團體</button>
+                    </form>
+                    <button v-if="currentGroup" @click="deleteGroup" class="text-red-600 text-sm mt-3">刪除【{{ currentGroup }}】及其帳目</button>
+                    <p v-else class="mt-3 text-sm text-slate-500">尚無團體，請先新增出遊團體。</p>
+                </div>
+                <div v-if="currentGroup">
+                    <h2 class="font-semibold mb-2">【{{ currentGroup }}】人員管理</h2>
+                    <form @submit.prevent="addMember" class="flex gap-2">
+                        <input v-model="newMemberName" aria-label="新人員姓名" maxlength="80" placeholder="輸入人員姓名" class="min-w-0 flex-1 border rounded-lg px-3 py-2">
+                        <button class="bg-indigo-50 text-indigo-700 px-3 py-2 rounded-lg">新增人員</button>
+                    </form>
+                    <ul class="flex flex-wrap gap-2 mt-3">
+                        <li v-for="m in currentMembers" :key="m" class="bg-slate-100 rounded-lg px-3 py-1 text-sm">{{ m }} <button @click="deleteMember(m)" :aria-label="'刪除人員 ' + m" class="text-red-600 ml-2">×</button></li>
+                    </ul>
+                    <p class="text-xs text-slate-500 mt-2">已有帳目的成員，須先刪除相關花費才能移除。</p>
+                </div>
+            </div>
+        </section>
+
         <div class="hidden print:block mb-4 text-xl font-bold text-slate-800">
             本次結算團體：【{{ currentGroup }}】
         </div>
@@ -45,33 +80,10 @@
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
             
             <div class="lg:col-span-1 space-y-6 no-print">
-
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                
+                <div v-if="currentMembers.length" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                     <h2 class="text-lg font-semibold mb-4 flex items-center gap-2 text-slate-900">
-                        <i class="fa-solid fa-users text-indigo-500"></i> 1. 【{{ currentGroup }}】成員管理
-                    </h2>
-
-                    <div class="flex flex-wrap gap-2 mb-4">
-                        <span v-for="m in currentMembers" :key="m" class="flex items-center gap-1.5 bg-indigo-50 text-indigo-700 text-sm font-medium pl-3 pr-2 py-1.5 rounded-full border border-indigo-100">
-                            {{ m }}
-                            <button @click="deleteMember(m)" title="刪除此成員" class="text-indigo-400 hover:text-red-500 transition">
-                                <i class="fa-solid fa-circle-xmark"></i>
-                            </button>
-                        </span>
-                        <span v-if="currentMembers.length === 0" class="text-slate-400 text-sm italic">目前尚無成員，請於下方新增</span>
-                    </div>
-
-                    <div class="flex gap-2">
-                        <input v-model="newMemberName" @keyup.enter="addMember" type="text" placeholder="輸入新成員姓名" class="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
-                        <button @click="addMember" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition shrink-0">
-                            <i class="fa-solid fa-user-plus mr-1"></i>新增
-                        </button>
-                    </div>
-                </div>
-
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                    <h2 class="text-lg font-semibold mb-4 flex items-center gap-2 text-slate-900">
-                        <i class="fa-solid fa-receipt text-indigo-500"></i> 2. 新增【{{ currentGroup }}】花費
+                        <i class="fa-solid fa-receipt text-indigo-500"></i> 新增【{{ currentGroup }}】花費
                     </h2>
                     
                     <div class="space-y-4">
@@ -112,7 +124,8 @@
                     </div>
                 </div>
 
-                <button @click="loadDemoData" class="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 py-2 rounded-lg font-medium transition text-xs flex items-center justify-center gap-2">
+                <p v-else class="text-slate-500">請先新增團體及人員，再開始記帳。</p>
+                <button v-if="currentMembers.length" @click="loadDemoData" class="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 py-2 rounded-lg font-medium transition text-xs flex items-center justify-center gap-2">
                     <i class="fa-solid fa-flask"></i> 載入一組【{{ currentGroup }}】測試花費 (Demo)
                 </button>
 
@@ -229,16 +242,22 @@
     </div>
 
     <script>
-        const { createApp, ref, computed } = Vue;
+        const { createApp, ref, computed, watch } = Vue;
 
         createApp({
             setup() {
-                // 1. 定義 3 組獨立的出遊團體與各自的內部成員（用 ref 包裝，讓成員新增/刪除能即時反應在畫面上）
+                // 1. 定義 3 組獨立的出遊團體與各自的內部成員
                 const builtInGroups = ref({
                     '大鎮': ['小狗', '土人', '小黑', '跳龜', '阿樂', '癡漢', '土妹'],
                     '武陵': ['跳龜', '權益', '狐狸', '蘇美'],
                     '拉賽福': ['跳龜', '怪咖', '瓦仔', '捲毛', '罐頭']
                 });
+                const groupExpenses = ref(Object.fromEntries(Object.keys(builtInGroups.value).map(name => [name, []])));
+                const newGroupName = ref('');
+                const newMemberName = ref('');
+                const saveStatus = ref('尚未存檔');
+                const saveError = ref(false);
+                const storageKey = 'travel-expense-calculator:v1';
 
                 // 當前選定的團體，預設選「大鎮」
                 const currentGroup = ref('大鎮');
@@ -247,12 +266,12 @@
                 const currentMembers = computed(() => {
                     return builtInGroups.value[currentGroup.value] || [];
                 });
-
-                // 新增成員用的輸入欄位
-                const newMemberName = ref('');
                 
                 // 本次出遊的花費清單
-                const expenses = ref([]);
+                const expenses = computed({
+                    get: () => groupExpenses.value[currentGroup.value] || [],
+                    set: value => { if (currentGroup.value) groupExpenses.value[currentGroup.value] = value; }
+                });
 
                 // 表單輸入綁定資料
                 const expense = ref({
@@ -264,60 +283,121 @@
 
                 // 當使用者切換團體時，自動清空舊花費，並重置輸入表單的預設人選
                 const handleGroupChange = () => {
-                    expenses.value = [];
                     expense.value.title = '';
                     expense.value.amount = null;
-                    if (currentMembers.value.length > 0) {
-                        expense.value.payer = currentMembers.value[0];
+                    expense.value.payer = currentMembers.value[0] || '';
                         expense.value.participants = [...currentMembers.value];
+                };
+
+                const snapshot = () => ({ version: 1, currentGroup: currentGroup.value, groups: builtInGroups.value, expenses: groupExpenses.value });
+                const saveData = () => {
+                    try {
+                        localStorage.setItem(storageKey, JSON.stringify(snapshot()));
+                        saveError.value = false;
+                        saveStatus.value = '已儲存於此瀏覽器 ' + new Date().toLocaleTimeString('zh-TW');
+                    } catch {
+                        saveError.value = true;
+                        saveStatus.value = '儲存失敗，請下載完整備份，避免資料遺失。';
                     }
+                };
+                const validName = value => typeof value === 'string' && value.trim() === value && value.length > 0 && value.length <= 80 && !['__proto__', 'constructor', 'prototype'].includes(value);
+                const validateBackup = data => {
+                    if (!data || data.version !== 1 || !data.groups || Array.isArray(data.groups) || typeof data.groups !== 'object' || !data.expenses || typeof data.expenses !== 'object' || Array.isArray(data.expenses)) throw Error('備份格式不正確');
+                    const names = Object.keys(data.groups);
+                    if (Object.keys(data.expenses).length !== names.length || (names.length ? !names.includes(data.currentGroup) : data.currentGroup !== '')) throw Error('團體資料不完整');
+                    for (const name of names) {
+                        const members = data.groups[name];
+                        if (!validName(name) || !Array.isArray(members) || !members.every(validName) || new Set(members).size !== members.length || !Object.hasOwn(data.expenses, name) || !Array.isArray(data.expenses[name])) throw Error('團體或人員資料不正確');
+                        for (const item of data.expenses[name]) {
+                            if (!item || typeof item.title !== 'string' || !item.title.trim() || !Number.isFinite(item.amount) || item.amount <= 0 || !members.includes(item.payer) || !Array.isArray(item.participants) || !item.participants.length || new Set(item.participants).size !== item.participants.length || !item.participants.every(m => members.includes(m))) throw Error('花費資料不正確');
+                        }
+                    }
+                    return data;
+                };
+                const restore = data => {
+                    builtInGroups.value = data.groups;
+                    groupExpenses.value = data.expenses;
+                    currentGroup.value = data.currentGroup;
+                    handleGroupChange();
+                };
+                try {
+                    const saved = localStorage.getItem(storageKey);
+                    if (saved) {
+                        restore(validateBackup(JSON.parse(saved)));
+                        saveStatus.value = '已載入上次存檔';
+                    }
+                } catch {
+                    saveError.value = true;
+                    saveStatus.value = '無法讀取上次存檔，請匯入有效備份；目前顯示預設資料。';
+                }
+                watch([builtInGroups, groupExpenses, currentGroup], saveData, { deep: true });
+                const download = (content, type, filename) => {
+                    const url = URL.createObjectURL(new Blob([content], { type }));
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = filename;
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                    setTimeout(() => URL.revokeObjectURL(url), 1000);
+                };
+                const exportBackup = () => download(JSON.stringify(snapshot(), null, 2), 'application/json', '出遊分帳備份_' + new Date().toISOString().slice(0, 10) + '.json');
+                const importBackup = async event => {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    try {
+                        if (file.size > 10 * 1024 * 1024) throw Error('備份檔不可超過 10 MB');
+                        const data = validateBackup(JSON.parse(await file.text()));
+                        if (!confirm('匯入將取代全部團體、人員與花費。建議先下載目前備份。確定匯入？')) return;
+                        restore(data);
+                        saveData();
+                    } catch (error) { alert('匯入失敗：' + error.message); }
+                    finally { event.target.value = ''; }
+                };
+                const addGroup = () => {
+                    const name = newGroupName.value.trim();
+                    if (!validName(name)) return alert('請輸入有效的團體名稱（1–80 字）');
+                    if (Object.hasOwn(builtInGroups.value, name)) return alert('團體名稱已存在');
+                    builtInGroups.value[name] = [];
+                    groupExpenses.value[name] = [];
+                    currentGroup.value = name;
+                    newGroupName.value = '';
+                    handleGroupChange();
+                };
+                const deleteGroup = () => {
+                    if (!currentGroup.value || !confirm(`確定刪除【${currentGroup.value}】及其全部人員、${expenses.value.length} 筆花費？此操作無法復原，建議先下載備份。`)) return;
+                    delete builtInGroups.value[currentGroup.value];
+                    delete groupExpenses.value[currentGroup.value];
+                    currentGroup.value = Object.keys(builtInGroups.value)[0] || '';
+                    handleGroupChange();
+                };
+                const addMember = () => {
+                    if (!currentGroup.value) return;
+                    const name = newMemberName.value.trim();
+                    if (!validName(name)) return alert('請輸入有效的人員姓名（1–80 字）');
+                    if (currentMembers.value.includes(name)) return alert('此團體已有同名人員');
+                    currentMembers.value.push(name);
+                    expense.value.participants.push(name);
+                    if (!expense.value.payer) expense.value.payer = name;
+                    newMemberName.value = '';
+                };
+                const deleteMember = name => {
+                    if (expenses.value.some(item => item.payer === name || item.participants.includes(name))) return alert('此人員已有相關花費，請先刪除相關花費後再移除人員。');
+                    if (!confirm(`確定從【${currentGroup.value}】刪除「${name}」？`)) return;
+                    builtInGroups.value[currentGroup.value] = currentMembers.value.filter(m => m !== name);
+                    expense.value.participants = expense.value.participants.filter(m => m !== name);
+                    if (expense.value.payer === name) expense.value.payer = currentMembers.value[0] || '';
                 };
 
                 const selectAllMembers = () => {
                     expense.value.participants = [...currentMembers.value];
                 };
 
-                // 新增成員到目前選定的團體
-                const addMember = () => {
-                    const name = newMemberName.value.trim();
-                    if (!name) return alert('請輸入成員姓名');
-                    if (currentMembers.value.includes(name)) return alert(`「${name}」已經是【${currentGroup.value}】的成員了`);
-
-                    builtInGroups.value[currentGroup.value].push(name);
-
-                    // 新成員預設加入分攤名單，若表單原本沒有付款人則指定為他
-                    expense.value.participants.push(name);
-                    if (!expense.value.payer) expense.value.payer = name;
-
-                    newMemberName.value = '';
-                };
-
-                // 從目前選定的團體中刪除成員，並同步清理表單與既有花費紀錄中的相關資料
-                const deleteMember = (name) => {
-                    if (currentMembers.value.length <= 1) return alert('至少需保留一位成員');
-                    if (!confirm(`確定要將「${name}」從【${currentGroup.value}】移除嗎？\n這會一併把此人從既有花費的分攤名單中移除（金額將由剩餘分攤人重新均分）。`)) return;
-
-                    const idx = builtInGroups.value[currentGroup.value].indexOf(name);
-                    if (idx > -1) builtInGroups.value[currentGroup.value].splice(idx, 1);
-
-                    // 從表單目前勾選的分攤名單移除
-                    expense.value.participants = expense.value.participants.filter(p => p !== name);
-                    // 若他剛好是表單目前選取的付款人，改指定為剩下的第一位成員
-                    if (expense.value.payer === name) {
-                        expense.value.payer = currentMembers.value[0] || '';
-                    }
-
-                    // 從既有花費紀錄的分攤名單中移除該成員（付款方紀錄予以保留，作為歷史紀錄）
-                    expenses.value.forEach(e => {
-                        e.participants = e.participants.filter(p => p !== name);
-                    });
-                };
-
                 // 新增花費項目
                 const addExpense = () => {
                     if (!expense.value.title.trim()) return alert('請輸入項目名稱');
-                    if (!expense.value.payer) return alert('請選擇付款人');
-                    if (!expense.value.amount || expense.value.amount <= 0) return alert('請輸入正確的金額');
+                    if (!currentMembers.value.includes(expense.value.payer)) return alert('請選擇付款人');
+                    if (!Number.isFinite(expense.value.amount) || expense.value.amount <= 0) return alert('請輸入正確的金額');
                     if (expense.value.participants.length === 0) return alert('請至少選擇一個分攤成員');
 
                     expenses.value.push({
@@ -344,29 +424,15 @@
                     }
                 };
 
-                // 根據當前選擇的團體，載入各自獨立的測試資料
+                // 測試資料使用目前成員，避免管理人員後產生無效帳目。
                 const loadDemoData = () => {
-                    if (currentGroup.value === '大鎮') {
-                        expenses.value = [
-                            { title: '大鎮包棟民宿', payer: '小狗', amount: 14000, participants: ['小狗', '土人', '小黑', '跳龜', '阿樂', '癡漢', '土妹'] }, // 全員均分
-                            { title: '第一晚熱炒聚餐', payer: '土人', amount: 4900, participants: ['小狗', '土人', '小黑', '跳龜', '阿樂', '癡漢', '土妹'] }, // 全員均分
-                            { title: '夜遊宵夜(部分人吃)', payer: '小黑', amount: 1200, participants: ['小黑', '跳龜', '阿樂', '癡漢'] }, // 指定特定人
-                            { title: '單獨幫土妹代購點心', payer: '跳龜', amount: 500, participants: ['土妹'] } // 單獨給特定人
-                        ];
-                    } else if (currentGroup.value === '武陵') {
-                        expenses.value = [
-                            { title: '武陵農場門票+露營費', payer: '跳龜', amount: 4000, participants: ['跳龜', '權益', '狐狸', '蘇美'] },
-                            { title: '烤肉食材大禮包', payer: '權益', amount: 3200, participants: ['跳龜', '權益', '狐狸', '蘇美'] },
-                            { title: '狐狸與蘇美私人零食', payer: '狐狸', amount: 600, participants: ['狐狸', '蘇美'] }
-                        ];
-                    } else if (currentGroup.value === '拉賽福') {
-                        expenses.value = [
-                            { title: '拉賽福聚會包廂費', payer: '怪咖', amount: 5000, participants: ['跳龜', '怪咖', '瓦仔', '捲毛', '罐頭'] },
-                            { title: '威士忌兩支', payer: '瓦仔', amount: 3000, participants: ['跳龜', '怪咖', '瓦仔', '捲毛'] } // 罐頭不喝酒不分攤
-                        ];
-                    }
+                    if (!currentMembers.value.length) return;
+                    if (expenses.value.length && !confirm('載入測試花費將取代目前團體的全部花費，確定繼續？')) return;
+                    expenses.value = [
+                        { title: '住宿費（測試）', payer: currentMembers.value[0], amount: 3000, participants: [...currentMembers.value] },
+                        { title: '聚餐（測試）', payer: currentMembers.value[1] || currentMembers.value[0], amount: 1200, participants: [...currentMembers.value] }
+                    ];
                 };
-
                 // 計算當前團體內每個人的支出摘要
                 const summary = computed(() => {
                     const res = {};
@@ -469,14 +535,12 @@
                 };
 
                 return {
+                    newGroupName, newMemberName, saveStatus, saveError, saveData, exportBackup, importBackup, addGroup, deleteGroup, addMember, deleteMember,
                     builtInGroups,
                     currentGroup,
                     currentMembers,
                     expense,
                     expenses,
-                    newMemberName,
-                    addMember,
-                    deleteMember,
                     handleGroupChange,
                     addExpense,
                     deleteExpense,
