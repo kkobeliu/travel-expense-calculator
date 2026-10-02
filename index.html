@@ -33,7 +33,7 @@
                 <label class="text-sm font-bold text-indigo-900 whitespace-nowrap"><i class="fa-solid fa-campground mr-1"></i>選取本次出遊團體：</label>
                 <select v-model="currentGroup" @change="handleGroupChange" class="px-4 py-2 border border-indigo-200 rounded-lg text-sm font-bold bg-white text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
                     <option v-for="(members, groupName) in builtInGroups" :key="groupName" :value="groupName">
-                        {{ groupName }} ({{ members.length }}人)
+                        {{ groupName }}（{{ members.length }}家／{{ groupHeadcount(groupName).total }}人）
                     </option>
                 </select>
             </div>
@@ -60,14 +60,23 @@
                     <p v-else class="mt-3 text-sm text-slate-500">尚無團體，請先新增出遊團體。</p>
                 </div>
                 <div v-if="currentGroup">
-                    <h2 class="font-semibold mb-2">【{{ currentGroup }}】人員管理</h2>
+                    <h2 class="font-semibold mb-2">【{{ currentGroup }}】人員／家庭管理</h2>
                     <form @submit.prevent="addMember" class="flex gap-2">
-                        <input v-model="newMemberName" aria-label="新人員姓名" maxlength="80" placeholder="輸入人員姓名" class="min-w-0 flex-1 border rounded-lg px-3 py-2">
+                        <input v-model="newMemberName" aria-label="新人員姓名" maxlength="80" placeholder="輸入家庭名稱或代表人姓名" class="min-w-0 flex-1 border rounded-lg px-3 py-2">
                         <button class="bg-indigo-50 text-indigo-700 px-3 py-2 rounded-lg">新增人員</button>
                     </form>
-                    <ul class="flex flex-wrap gap-2 mt-3">
-                        <li v-for="m in currentMembers" :key="m" class="bg-slate-100 rounded-lg px-3 py-1 text-sm">{{ m }} <button @click="deleteMember(m)" :aria-label="'刪除人員 ' + m" class="text-red-600 ml-2">×</button></li>
+                    <p class="text-xs text-slate-500 mt-2">每筆人員代表一家；新增與舊資料預設為 1 位大人、0 位小孩，可於下方修改。</p>
+                    <ul class="space-y-2 mt-3">
+                        <li v-for="m in currentMembers" :key="m" class="bg-slate-50 border border-slate-100 rounded-lg p-3 text-sm flex flex-wrap items-center gap-3">
+                            <span class="font-medium break-all flex-1 min-w-20">{{ m }}</span>
+                            <label class="flex items-center gap-1">大人 <input type="number" min="0" max="999" step="1" :value="familySizes[currentGroup][m].adults" @change="updateFamilyCount(m, 'adults', $event)" :aria-label="m + ' 大人人數'" class="w-16 border rounded px-2 py-1"></label>
+                            <label class="flex items-center gap-1">小孩 <input type="number" min="0" max="999" step="1" :value="familySizes[currentGroup][m].children" @change="updateFamilyCount(m, 'children', $event)" :aria-label="m + ' 小孩人數'" class="w-16 border rounded px-2 py-1"></label>
+                            <span class="text-indigo-700">共 {{ familySizes[currentGroup][m].adults + familySizes[currentGroup][m].children }} 人</span>
+                            <button @click="deleteMember(m)" :aria-label="'刪除人員 ' + m" class="text-red-600">×</button>
+                        </li>
                     </ul>
+                    <p class="font-semibold text-indigo-800 mt-3" role="status">本團共 {{ currentMembers.length }} 家：{{ currentHeadcount.adults }} 位大人、{{ currentHeadcount.children }} 位小孩，合計 {{ currentHeadcount.total }} 人</p>
+                    <p class="text-xs text-slate-500 mt-2">家庭人數供出遊統計使用；花費仍依勾選的代表人平均分攤。</p>
                     <p class="text-xs text-slate-500 mt-2">已有帳目的成員，須先刪除相關花費才能移除。</p>
                 </div>
             </div>
@@ -253,6 +262,18 @@
                     '拉賽福': ['跳龜', '怪咖', '瓦仔', '捲毛', '罐頭']
                 });
                 const groupExpenses = ref(Object.fromEntries(Object.keys(builtInGroups.value).map(name => [name, []])));
+                const defaultFamilySizes = groups => Object.fromEntries(Object.entries(groups).map(([group, members]) => [group, Object.fromEntries(members.map(member => [member, { adults: 1, children: 0 }]))]));
+                const familySizes = ref(defaultFamilySizes(builtInGroups.value));
+                const groupHeadcount = group => {
+                    const counts = { adults: 0, children: 0, total: 0 };
+                    for (const member of builtInGroups.value[group] || []) {
+                        const family = familySizes.value[group]?.[member];
+                        counts.adults += family?.adults ?? 1;
+                        counts.children += family?.children ?? 0;
+                    }
+                    counts.total = counts.adults + counts.children;
+                    return counts;
+                };
                 const newGroupName = ref('');
                 const newMemberName = ref('');
                 const saveStatus = ref('尚未存檔');
@@ -261,6 +282,20 @@
 
                 // 當前選定的團體，預設選「大鎮」
                 const currentGroup = ref('大鎮');
+                const currentHeadcount = computed(() => groupHeadcount(currentGroup.value));
+                const validCount = value => Number.isInteger(value) && value >= 0 && value <= 999;
+                const updateFamilyCount = (member, field, event) => {
+                    if (!['adults', 'children'].includes(field) || !currentMembers.value.includes(member)) return;
+                    const family = familySizes.value[currentGroup.value][member];
+                    const raw = event.target.value.trim();
+                    const value = Number(raw);
+                    const other = field === 'adults' ? 'children' : 'adults';
+                    if (!raw || !validCount(value) || value + family[other] === 0) {
+                        event.target.value = String(family[field]);
+                        return alert('人數須為 0–999 的整數，且每家至少 1 人。');
+                    }
+                    family[field] = value;
+                };
 
                 // 動態取得當前團體的成員名單
                 const currentMembers = computed(() => {
@@ -289,7 +324,7 @@
                         expense.value.participants = [...currentMembers.value];
                 };
 
-                const snapshot = () => ({ version: 1, currentGroup: currentGroup.value, groups: builtInGroups.value, expenses: groupExpenses.value });
+                const snapshot = () => ({ version: 2, currentGroup: currentGroup.value, groups: builtInGroups.value, expenses: groupExpenses.value, familySizes: familySizes.value });
                 const saveData = () => {
                     try {
                         localStorage.setItem(storageKey, JSON.stringify(snapshot()));
@@ -302,7 +337,7 @@
                 };
                 const validName = value => typeof value === 'string' && value.trim() === value && value.length > 0 && value.length <= 80 && !['__proto__', 'constructor', 'prototype'].includes(value);
                 const validateBackup = data => {
-                    if (!data || data.version !== 1 || !data.groups || Array.isArray(data.groups) || typeof data.groups !== 'object' || !data.expenses || typeof data.expenses !== 'object' || Array.isArray(data.expenses)) throw Error('備份格式不正確');
+                    if (!data || ![1, 2].includes(data.version) || !data.groups || Array.isArray(data.groups) || typeof data.groups !== 'object' || !data.expenses || typeof data.expenses !== 'object' || Array.isArray(data.expenses)) throw Error('備份格式不正確');
                     const names = Object.keys(data.groups);
                     if (Object.keys(data.expenses).length !== names.length || (names.length ? !names.includes(data.currentGroup) : data.currentGroup !== '')) throw Error('團體資料不完整');
                     for (const name of names) {
@@ -312,11 +347,22 @@
                             if (!item || typeof item.title !== 'string' || !item.title.trim() || !Number.isFinite(item.amount) || item.amount <= 0 || !members.includes(item.payer) || !Array.isArray(item.participants) || !item.participants.length || new Set(item.participants).size !== item.participants.length || !item.participants.every(m => members.includes(m))) throw Error('花費資料不正確');
                         }
                     }
+                    if (data.version === 1) data.familySizes = defaultFamilySizes(data.groups);
+                    const families = data.familySizes;
+                    if (!families || typeof families !== 'object' || Array.isArray(families) || Object.keys(families).length !== names.length) throw Error('家庭資料不完整');
+                    for (const name of names) {
+                        if (!Object.hasOwn(families, name) || !families[name] || typeof families[name] !== 'object' || Array.isArray(families[name]) || Object.keys(families[name]).length !== data.groups[name].length) throw Error('家庭資料不完整');
+                        for (const member of data.groups[name]) {
+                            const family = families[name][member];
+                            if (!Object.hasOwn(families[name], member) || !family || !validCount(family.adults) || !validCount(family.children) || family.adults + family.children === 0) throw Error('家庭大人、小孩人數不正確');
+                        }
+                    }
                     return data;
                 };
                 const restore = data => {
                     builtInGroups.value = data.groups;
                     groupExpenses.value = data.expenses;
+                    familySizes.value = data.familySizes;
                     currentGroup.value = data.currentGroup;
                     handleGroupChange();
                 };
@@ -330,7 +376,7 @@
                     saveError.value = true;
                     saveStatus.value = '無法讀取上次存檔，請匯入有效備份；目前顯示預設資料。';
                 }
-                watch([builtInGroups, groupExpenses, currentGroup], saveData, { deep: true });
+                watch([builtInGroups, groupExpenses, familySizes, currentGroup], saveData, { deep: true });
                 const download = (content, type, filename) => {
                     const url = URL.createObjectURL(new Blob([content], { type }));
                     const link = document.createElement('a');
@@ -360,6 +406,7 @@
                     if (Object.hasOwn(builtInGroups.value, name)) return alert('團體名稱已存在');
                     builtInGroups.value[name] = [];
                     groupExpenses.value[name] = [];
+                    familySizes.value[name] = {};
                     currentGroup.value = name;
                     newGroupName.value = '';
                     handleGroupChange();
@@ -368,6 +415,7 @@
                     if (!currentGroup.value || !confirm(`確定刪除【${currentGroup.value}】及其全部人員、${expenses.value.length} 筆花費？此操作無法復原，建議先下載備份。`)) return;
                     delete builtInGroups.value[currentGroup.value];
                     delete groupExpenses.value[currentGroup.value];
+                    delete familySizes.value[currentGroup.value];
                     currentGroup.value = Object.keys(builtInGroups.value)[0] || '';
                     handleGroupChange();
                 };
@@ -377,6 +425,7 @@
                     if (!validName(name)) return alert('請輸入有效的人員姓名（1–80 字）');
                     if (currentMembers.value.includes(name)) return alert('此團體已有同名人員');
                     currentMembers.value.push(name);
+                    familySizes.value[currentGroup.value][name] = { adults: 1, children: 0 };
                     expense.value.participants.push(name);
                     if (!expense.value.payer) expense.value.payer = name;
                     newMemberName.value = '';
@@ -385,6 +434,7 @@
                     if (expenses.value.some(item => item.payer === name || item.participants.includes(name))) return alert('此人員已有相關花費，請先刪除相關花費後再移除人員。');
                     if (!confirm(`確定從【${currentGroup.value}】刪除「${name}」？`)) return;
                     builtInGroups.value[currentGroup.value] = currentMembers.value.filter(m => m !== name);
+                    delete familySizes.value[currentGroup.value][name];
                     expense.value.participants = expense.value.participants.filter(m => m !== name);
                     if (expense.value.payer === name) expense.value.payer = currentMembers.value[0] || '';
                 };
@@ -535,6 +585,7 @@
                 };
 
                 return {
+                    familySizes, groupHeadcount, currentHeadcount, updateFamilyCount,
                     newGroupName, newMemberName, saveStatus, saveError, saveData, exportBackup, importBackup, addGroup, deleteGroup, addMember, deleteMember,
                     builtInGroups,
                     currentGroup,
