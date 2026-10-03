@@ -39,14 +39,14 @@
             .shadow-sm, .rounded-2xl { box-shadow: none !important; border: none !important; }
             .report-layout, .report-content { display: block !important; min-width: 0; }
             .report-panel { padding: 0 !important; margin-top: 6mm !important; }
-            .desktop-expenses { display: none !important; }
-            .mobile-expenses { display: block !important; font-size: 11pt; }
-            .mobile-expenses article { break-inside: auto; border: 1px solid #cbd5e1 !important; padding: 4mm !important; margin-bottom: 4mm; }
-            .mobile-expenses dl { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 2mm; }
-            .mobile-expenses dl > div { break-inside: avoid; }
-            .mobile-expenses h3 { overflow-wrap: anywhere; }
-            .expense-table { font-size: 10pt; }
-            .expense-table th, .expense-table td { padding: 2.5mm 2mm; border-bottom: 1px solid #cbd5e1; }
+            .desktop-expenses { display: block !important; }
+            .mobile-expenses { display: none !important; }
+            .expense-table { font-size: 8.5pt; line-height: 1.4; }
+            .expense-table th, .expense-table td { padding: 1.8mm 0.8mm; border-bottom: 1px solid #cbd5e1; }
+            .expense-table .item-column { width: 22%; }
+            .expense-table .payer-column { width: 10%; }
+            .expense-table td > div { display: none; }
+            .expense-table td span { font-size: inherit; padding: 0; }
             .expense-table thead { display: table-header-group; }
             .expense-table tr, .settlement-card { break-inside: avoid; }
             .expense-table caption, h2, h3 { break-after: avoid; }
@@ -222,7 +222,7 @@
                         </div>
                     </div>
 
-                    <p class="text-sm text-slate-500 mb-4 no-print">全部 {{ currentMembers.length }} 位代表人的分攤金額均列於下方；超過 8 位時接續分表顯示。PDF 採直式 A4，每筆花費逐家列出，手機閱讀不用旋轉。</p>
+                    <p class="text-sm text-slate-500 mb-4 no-print">全部 {{ currentMembers.length }} 位代表人的分攤金額均列於下方；超過 8 位時接續分表顯示。PDF 採直式 A4 表格，每筆花費一列，所有人的金額橫向對照。</p>
                     <div class="desktop-expenses">
                         <div v-for="(members, part) in reportMemberGroups" :key="part" class="expense-block">
                         <table class="expense-table text-left text-sm">
