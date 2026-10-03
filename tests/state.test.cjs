@@ -107,5 +107,63 @@ function boot(saved, failSave = false) {
     const quota = boot(undefined, true);
     quota.app.saveData();
     assert(quota.app.saveError.value, 'failed storage is visible');
+    const splitEnv = boot();
+    const s = splitEnv.app;
+    s.newGroupName.value = '分攤驗證'; s.addGroup();
+    const names = ['土', '龜', '黑', '樂', '儒', '痴'];
+    for (const name of names) { s.newMemberName.value = name; s.addMember(); }
+    const counts = Object.fromEntries(names.map(m => [m, { adults: m === '痴' ? 1 : 2, children: 0 }]));
+    Object.assign(s.expense.value, { title: '第二天晚餐', amount: 10440, counts, mode: 'people' });
+    assert.equal(s.splitPreview.value.error, '');
+    assert.equal(s.splitPreview.value.weight, 11);
+    assert.deepEqual(Array.from(names, m => s.splitPreview.value.allocations[m]), [1899,1898,1898,1898,1898,949]);
+    s.addExpense();
+    const dinner = JSON.stringify(s.expenses.value[0]);
+    for (const m of names) s.expense.value.counts[m] = { adults: m === '痴' ? 1 : 2, children: ['土','龜','黑'].includes(m) ? 2 : m === '痴' ? 0 : 1 };
+    Object.assign(s.expense.value, { title: '中正體育館', amount: 1800, mode: 'half' });
+    assert.equal(s.splitPreview.value.weight, 15);
+    assert.deepEqual(Array.from(names, m => s.splitPreview.value.allocations[m]), [360,360,360,300,300,120]);
+    s.addExpense();
+    s.updateFamilyCount('土', 'children', { target: { value: '7' } });
+    assert(s.buildCSV().includes('"中正體育館","土","1800","小孩半價","360","360","360","300","300","120"'));
+    assert(s.buildCSV().includes('"中正體育館","土","2","2","360"'));
+    assert.equal(JSON.stringify(s.expenses.value[0]), dinner, 'saved counts and allocations immutable');
+    const netSum = Object.values(s.summary.value).reduce((sum, item) => sum + Math.round(item.net * 100), 0);
+    assert.equal(netSum, 0);
+    const residual = Object.fromEntries(Object.entries(s.summary.value).map(([name, item]) => [name, Math.round(item.net * 100)]));
+    for (const transfer of s.settlements.value) { residual[transfer.from] += Math.round(transfer.amount * 100); residual[transfer.to] -= Math.round(transfer.amount * 100); }
+    assert(Object.values(residual).every(n => n === 0), 'transfers settle everyone exactly');
+    Object.assign(s.expense.value, { title: '免費小孩', amount: 100.01, mode: 'adults', participants: ['土','龜'], counts: { '土': {adults:1,children:0}, '龜': {adults:0,children:2} } });
+    assert.equal(s.splitPreview.value.allocations['土'], 100.01);
+    assert.equal(s.splitPreview.value.allocations['龜'], 0);
+    s.expense.value.counts['土'].adults = 0; s.expense.value.counts['土'].children = 1;
+    assert(s.splitPreview.value.error, 'all free children rejected');
+    s.expense.value.mode = 'people';
+    assert.equal(Object.values(s.splitPreview.value.allocations).reduce((n,v) => n+Math.round(v*100),0),10001);
+    s.expense.value.mode = 'custom'; s.expense.value.customAmounts = { '土': 80, '龜': 20 };
+    assert(s.splitPreview.value.error, 'custom mismatch rejected');
+    const countBefore = s.expenses.value.length; s.addExpense(); assert.equal(s.expenses.value.length,countBefore);
+    s.expense.value.customAmounts['龜'] = 20.01;
+    assert.equal(s.splitPreview.value.error, ''); s.addExpense();
+    await splitEnv.tick();
+    const v3 = splitEnv.store.get('travel-expense-calculator:v1');
+    assert.equal(boot(v3).app.expenses.value[2].allocations['龜'],20.01);
+    const tampered = JSON.parse(v3); tampered.expenses['分攤驗證'][0].allocations['土']++;
+    await s.importBackup(fileEvent(JSON.stringify(tampered)));
+    assert.equal(JSON.stringify(s.expenses.value[0]), dinner, 'tampered allocation rejected');
+    const old = JSON.parse(v3); old.version = 2;
+    old.expenses['分攤驗證'] = [{ title:'舊帳',payer:'土',amount:100,participants:['土','龜','黑'] }];
+    const legacyApp = boot(JSON.stringify(old)).app;
+    assert.equal(legacyApp.summary.value['土'].shouldPay,34);
+    assert.equal(legacyApp.summary.value['龜'].shouldPay,33);
+    for (let total = 1; total <= 25; total++) {
+        for (const mode of ['people','half','adults']) {
+            const result = s.calculateSplit({ amount: total / 100, mode, participants: ['a','b','c'], counts: {a:{adults:1,children:3},b:{adults:0,children:2},c:{adults:2,children:0}} });
+            assert.equal(Object.values(result.allocations).reduce((sum,n) => sum+Math.round(n*100),0),total);
+            assert(Object.values(result.allocations).every(n => n >= 0));
+            if (mode === 'adults') assert.equal(result.allocations.b,0);
+        }
+    }
+    console.log('PASS: dinner/gym examples, all split modes, exact totals/transfers, invalid inputs, immutable snapshots, v3 backups, legacy shares');
     console.log('PASS: group/member CRUD, isolation, protected deletion, autosave, reload, backup validation/import, empty state, demo, storage failures');
 })().catch(error => { console.error(error); process.exitCode = 1; });
