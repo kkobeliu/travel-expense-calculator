@@ -17,11 +17,21 @@
         .expense-table .action-column { width: 48px; }
         .expense-block + .expense-block { margin-top: 24px; }
         .mobile-expenses { display: none; }
+        .entry-panel { min-width: 0; }
+        @media screen and (min-width: 1100px) {
+            #app { max-width: 1500px; display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 24px; align-items: start; }
+            #app > header { grid-column: 1 / -1; margin-bottom: 0; }
+            .management-panel { grid-column: 1; grid-row: 2; margin-bottom: 0; }
+            #app .management-columns { grid-template-columns: minmax(0, 1fr); }
+            .report-layout { display: contents; }
+            .entry-panel { grid-column: 2; grid-row: 2; margin-top: 0 !important; }
+            .report-content { grid-column: 1 / -1; margin-top: 0 !important; }
+        }
         @media screen and (max-width: 639px) {
             .desktop-expenses { display: none; }
             .mobile-expenses { display: block; }
         }
-        @page { size: A4 landscape; margin: 12mm; }
+        @page { size: A4 portrait; margin: 12mm; }
         @media print {
             html, body { background-color: #fff; color: #000; width: auto; margin: 0; }
             .no-print { display: none !important; }
@@ -29,15 +39,19 @@
             .shadow-sm, .rounded-2xl { box-shadow: none !important; border: none !important; }
             .report-layout, .report-content { display: block !important; min-width: 0; }
             .report-panel { padding: 0 !important; margin-top: 6mm !important; }
-            .desktop-expenses { display: block !important; }
-            .mobile-expenses { display: none !important; }
+            .desktop-expenses { display: none !important; }
+            .mobile-expenses { display: block !important; font-size: 11pt; }
+            .mobile-expenses article { break-inside: auto; border: 1px solid #cbd5e1 !important; padding: 4mm !important; margin-bottom: 4mm; }
+            .mobile-expenses dl { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 2mm; }
+            .mobile-expenses dl > div { break-inside: avoid; }
+            .mobile-expenses h3 { overflow-wrap: anywhere; }
             .expense-table { font-size: 10pt; }
             .expense-table th, .expense-table td { padding: 2.5mm 2mm; border-bottom: 1px solid #cbd5e1; }
             .expense-table thead { display: table-header-group; }
             .expense-table tr, .settlement-card { break-inside: avoid; }
             .expense-table caption, h2, h3 { break-after: avoid; }
             .expense-table caption { text-align: left; padding-bottom: 2mm; }
-            .summary-grid { display: grid !important; grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+            .summary-grid { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
             .settlement-card { overflow-wrap: anywhere; }
         }
     </style>
@@ -54,9 +68,9 @@
                 <p class="text-slate-500 mt-1">選定本次出遊團體後，即可針對內部成員進行個別分攤與最佳化拆帳</p>
             </div>
             
-            <div class="bg-indigo-50 p-3 rounded-xl border border-indigo-100 flex items-center gap-3 no-print">
+            <div class="bg-indigo-50 p-3 rounded-xl border border-indigo-100 flex flex-wrap items-center gap-3 no-print">
                 <label class="text-sm font-bold text-indigo-900 whitespace-nowrap"><i class="fa-solid fa-campground mr-1"></i>選取本次出遊團體：</label>
-                <select v-model="currentGroup" @change="handleGroupChange" class="px-4 py-2 border border-indigo-200 rounded-lg text-sm font-bold bg-white text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+                <select v-model="currentGroup" @change="handleGroupChange" class="min-w-0 max-w-full flex-1 px-4 py-2 border border-indigo-200 rounded-lg text-sm font-bold bg-white text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
                     <option v-for="(members, groupName) in builtInGroups" :key="groupName" :value="groupName">
                         {{ groupName }}（{{ members.length }}家／{{ groupHeadcount(groupName).total }}人）
                     </option>
@@ -64,7 +78,7 @@
             </div>
         </header>
 
-        <section class="mb-6 bg-white p-5 rounded-2xl border border-slate-200 no-print" aria-label="團體與人員管理">
+        <section class="management-panel mb-6 bg-white p-5 rounded-2xl border border-slate-200 no-print" aria-label="團體與人員管理">
             <div class="flex flex-wrap items-center gap-3 mb-3">
                 <button @click="saveData" class="bg-indigo-600 text-white px-4 py-2 rounded-lg">存檔</button>
                 <button @click="exportBackup" class="border border-slate-300 px-4 py-2 rounded-lg">下載完整備份</button>
@@ -74,7 +88,7 @@
                 <span role="status" aria-live="polite" class="text-sm" :class="saveError ? 'text-red-600' : 'text-slate-500'">{{ saveStatus }}</span>
             </div>
             <p class="text-xs text-slate-500 mb-4">變更會自動儲存在此瀏覽器；不會跨裝置同步。清除瀏覽器資料前，請下載完整備份。</p>
-            <div class="grid md:grid-cols-2 gap-5">
+            <div class="management-columns grid md:grid-cols-2 gap-5">
                 <div>
                     <h2 class="font-semibold mb-2">出遊團體</h2>
                     <form @submit.prevent="addGroup" class="flex gap-2">
@@ -113,7 +127,7 @@
 
         <div class="report-layout space-y-8">
             
-            <div class="lg:col-span-1 space-y-6 no-print">
+            <div class="entry-panel space-y-6 no-print">
                 
                 <div v-if="currentMembers.length" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                     <h2 class="text-lg font-semibold mb-4 flex items-center gap-2 text-slate-900">
@@ -208,7 +222,7 @@
                         </div>
                     </div>
 
-                    <p class="text-sm text-slate-500 mb-4 no-print">全部 {{ currentMembers.length }} 位代表人的分攤金額均列於下方；超過 8 位時接續分表顯示。PDF 採橫向 A4，保留所有欄位。</p>
+                    <p class="text-sm text-slate-500 mb-4 no-print">全部 {{ currentMembers.length }} 位代表人的分攤金額均列於下方；超過 8 位時接續分表顯示。PDF 採直式 A4，每筆花費逐家列出，手機閱讀不用旋轉。</p>
                     <div class="desktop-expenses">
                         <div v-for="(members, part) in reportMemberGroups" :key="part" class="expense-block">
                         <table class="expense-table text-left text-sm">
@@ -257,7 +271,7 @@
                         <article v-for="(item, idx) in expenses" :key="idx" class="border border-slate-200 rounded-xl p-3">
                             <div class="flex justify-between gap-3">
                                 <div class="min-w-0 break-words"><h3 class="font-semibold">{{ item.title }}</h3><p class="text-xs text-slate-500">{{ splitLabel(item) }}</p><p class="text-sm text-slate-500">付款：{{ item.payer }}</p></div>
-                                <button @click="deleteExpense(idx)" :aria-label="'刪除花費 ' + item.title" class="text-red-500 text-sm shrink-0">刪除</button>
+                                <button @click="deleteExpense(idx)" :aria-label="'刪除花費 ' + item.title" class="no-print text-red-500 text-sm shrink-0">刪除</button>
                             </div>
                             <p class="font-bold my-2 break-all">總金額 ${{ item.amount.toLocaleString() }}</p>
                             <dl class="grid grid-cols-2 gap-2 text-sm">
@@ -298,7 +312,7 @@
                             </h3>
                             <ul v-if="settlements.length > 0" class="space-y-3">
                                 <li v-for="(s, idx) in settlements" :key="idx" class="settlement-card bg-white px-4 py-3 rounded-lg shadow-sm border border-slate-100 flex flex-wrap gap-2 items-center justify-between text-sm">
-                                    <div class="flex items-center gap-3">
+                                    <div class="flex flex-wrap items-center gap-3 min-w-0">
                                         <span class="font-bold text-red-600 bg-red-50 px-2 py-1 rounded">{{ s.from }}</span>
                                         <span class="text-slate-400"><i class="fa-solid fa-arrow-right-long"></i></span>
                                         <span class="text-slate-500">應轉帳給</span>
